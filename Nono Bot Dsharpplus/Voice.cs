@@ -1,13 +1,12 @@
 ﻿using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System.Net;
 using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
-using DSharpPlus;
 using DSharpPlus.CommandsNext;
 using DSharpPlus.CommandsNext.Attributes;
 using DSharpPlus.Interactivity;
@@ -22,7 +21,7 @@ namespace Nono_Bot_Dsharpplus
     [Group("보이스")]
     public class Voice
     {
-        private CancellationTokenSource cts = new CancellationTokenSource();
+        public Queue<string> musicQueue = new Queue<string>();
         public static bool isPlaying = false;
 
         [Command("참가")]
@@ -67,14 +66,27 @@ namespace Nono_Bot_Dsharpplus
             if (!isPlaying)
                 return;
 
-            isPlaying = false;
+            if (isPlaying)
+            {
+                isPlaying = false;
+                await MusicStopped(ctx);
+            }
             await ctx.RespondAsync("정지할게요...");
             await vnc.SendSpeakingAsync(false);
         }
-
-        [Command("재생")]
+        
         public async Task Play(CommandContext ctx, [RemainingText] string file)
         {
+            var id = YoutubeClient.ParseVideoId(file);
+
+            var client = new YoutubeClient();
+            var streamInfoSet = await client.GetVideoMediaStreamInfosAsync(id);
+
+
+            var streamInfo = streamInfoSet.Audio.WithHighestBitrate();
+            var ext = streamInfo.Container.GetFileExtension();
+            await client.DownloadMediaStreamAsync(streamInfo, $"audio.{ext}");
+
             var vnext = ctx.Client.GetVoiceNextClient();
 
             var vnc = vnext.GetConnection(ctx.Guild);
@@ -84,7 +96,7 @@ namespace Nono_Bot_Dsharpplus
                 return;
             }
 
-            if (!File.Exists(file))
+            if (!File.Exists($"audio.{ext}"))
             {
                 await ctx.RespondAsync("아우우... 파일이 존재하지 않는다는 것 같은데요...");
                 return;
@@ -103,7 +115,7 @@ namespace Nono_Bot_Dsharpplus
             var psi = new ProcessStartInfo
             {
                 FileName = "ffmpeg",
-                Arguments = $@"-i ""{file}"" -ac 2 -f s16le -ar 48000 pipe:1",
+                Arguments = $@"-i ""audio.{ext}"" -ac 2 -f s16le -ar 48000 pipe:1",
                 RedirectStandardOutput = true,
                 UseShellExecute = false
             };
@@ -127,9 +139,11 @@ namespace Nono_Bot_Dsharpplus
                 await vnc.SendSpeakingAsync(false);
 
             isPlaying = false;
+            Console.WriteLine("노래 끝");
+            await MusicStopped(ctx);
         }
 
-        [Command("유튭")]
+        [Command("유튜브")]
         public async Task Youtube(CommandContext ctx, [RemainingText] string text)
         {
             HtmlDocument htmlDoc = new HtmlDocument();
@@ -195,17 +209,18 @@ namespace Nono_Bot_Dsharpplus
             if (selectedNumber == 0)
                 return;
 
-            var id = YoutubeClient.ParseVideoId(links[selectedNumber-1]);
+            if (isPlaying)
+                musicQueue.Enqueue(links[selectedNumber - 1]);
+            else
+                await Play(ctx, links[selectedNumber - 1]);
+        }
 
-            var client = new YoutubeClient();
-            var streamInfoSet = await client.GetVideoMediaStreamInfosAsync(id);
+        private async Task MusicStopped(CommandContext ctx)
+        {
+            if(musicQueue.Count <= 0)
+                return;
 
-
-            var streamInfo = streamInfoSet.Audio.WithHighestBitrate();
-            var ext = streamInfo.Container.GetFileExtension();
-            await client.DownloadMediaStreamAsync(streamInfo, $"audio.{ext}");
-
-            await Play(ctx, $"audio.{ext}");
+            await Play(ctx, musicQueue.Dequeue());
         }
     }
 }
