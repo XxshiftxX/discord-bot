@@ -15,6 +15,7 @@ namespace Nono_Bot_Dsharpplus
     class Program
     {
         static Random random = new Random();
+        static string[] keys;
 
         static DiscordClient discord;
         static CommandsNextModule commands;
@@ -25,11 +26,12 @@ namespace Nono_Bot_Dsharpplus
 
         static async Task MainAsync(string[] args)
         {
+            keys = File.ReadAllLines(@"D:\discordKey.txt");
             discord = new DiscordClient(new DiscordConfiguration
             {
                 UseInternalLogHandler = true,
                 LogLevel = LogLevel.Debug,
-                Token = "NDA5MTk3NjY2NDQ3MTMwNjI3.DVbPGw.Bxzt1u1h0qQf-kQX4spE-yIP-3g",
+                Token = keys[0],
                 TokenType = TokenType.Bot
             });
 
